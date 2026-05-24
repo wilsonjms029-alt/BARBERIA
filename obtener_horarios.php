@@ -8,7 +8,7 @@ $servicio_id = $_GET['servicio_id'] ?? null;
 if (!$barbero_id || !$fecha || !$servicio_id) { echo json_encode([]); exit; }
 
 // Horario Barbero
-$stmt = $pdo->prepare("SELECT hora_inicio, hora_fin, almuerzo_inicio, almuerzo_fin FROM barberos WHERE id = ?");
+$stmt = $pdo->prepare("SELECT hora_inicio, hora_fin, hora_descanso_inicio, hora_descanso_fin FROM barberos WHERE id = ?");
 $stmt->execute([$barbero_id]);
 $horario = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -22,8 +22,8 @@ if (!$horario) { echo json_encode([]); exit; }
 function toMin($time) { return strtotime("1970-01-01 $time") / 60; }
 $inicio_dia = toMin($horario['hora_inicio']);
 $fin_dia = toMin($horario['hora_fin']);
-$inicio_alm = toMin($horario['almuerzo_inicio']);
-$fin_alm = toMin($horario['almuerzo_fin']);
+$inicio_alm = $horario['hora_descanso_inicio'] ? toMin($horario['hora_descanso_inicio']) : null;
+$fin_alm = $horario['hora_descanso_fin'] ? toMin($horario['hora_descanso_fin']) : null;
 
 // Citas existentes (bloqueos)
 $stmt = $pdo->prepare("SELECT hora, servicio FROM citas WHERE barbero_id = ? AND fecha = ? AND estado_pago != 'rechazado'");
@@ -44,8 +44,12 @@ $horas_disponibles = [];
 
 for ($t = $inicio_dia; $t <= ($fin_dia - $duracion_servicio); $t += $intervalo) {
     $t_fin = $t + $duracion_servicio;
+    
     // Validar Almuerzo
-    if ($t < $fin_alm && $t_fin > $inicio_alm) continue;
+    if ($inicio_alm && $fin_alm) {
+        if ($t < $fin_alm && $t_fin > $inicio_alm) continue;
+    }
+    
     // Validar Choque Citas
     $choca = false;
     foreach ($citas_ocupadas as $c) {

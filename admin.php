@@ -4,7 +4,10 @@ require 'db.php';
 if (!isset($_SESSION['usuario_id'])) { $_SESSION['usuario_id']=1; $_SESSION['usuario_nombre']="Jefe"; $_SESSION['usuario_rol']="admin"; }
 $hoy = date('Y-m-d');
 $ws_url = "";
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // --- LÓGICA DE CITAS ---
     if (isset($_POST['accion_cita'])) {
         if ($_POST['accion_cita'] == 'aprobar') {
             $cita_id = $_POST['cita_id'];
@@ -21,18 +24,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($_POST['accion_cita'] == 'borrar') { $pdo->prepare("DELETE FROM citas WHERE id=?")->execute([$_POST['cita_id']]); }
     }
+
+    // --- LÓGICA DE SERVICIOS ---
     if (isset($_POST['accion_servicio'])) {
         if ($_POST['accion_servicio'] == 'crear') {
-            $img = !empty($_POST['img_url']) ? $_POST['img_url'] : "https://via.placeholder.com/150";
+            $img = "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=400"; // Imagen por defecto
+            
+            if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] == UPLOAD_ERR_OK) {
+                $dir = 'uploads/';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $nombre_archivo = time() . '_serv_' . basename($_FILES['imagen']['name']);
+                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dir . $nombre_archivo)) {
+                    $img = $dir . $nombre_archivo;
+                }
+            }
             $pdo->prepare("INSERT INTO servicios (nombre, precio, duracion, imagen, activo) VALUES (?, ?, ?, ?, 1)")->execute([$_POST['nombre'], $_POST['precio'], $_POST['duracion'], $img]);
-        } elseif ($_POST['accion_servicio'] == 'borrar') { $pdo->prepare("DELETE FROM servicios WHERE id=?")->execute([$_POST['id']]); }
+        
+        // NUEVA LÓGICA: EDITAR SERVICIO
+        } elseif ($_POST['accion_servicio'] == 'editar') {
+            $id = $_POST['id'];
+            $nombre = $_POST['nombre'];
+            $precio = $_POST['precio'];
+            $duracion = $_POST['duracion'];
+            
+            $query = "UPDATE servicios SET nombre=?, precio=?, duracion=? WHERE id=?";
+            $params = [$nombre, $precio, $duracion, $id];
+
+            if (isset($_FILES['imagen']) && $_FILES['imagen']['error'] == UPLOAD_ERR_OK) {
+                $dir = 'uploads/';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $nombre_archivo = time() . '_serv_' . basename($_FILES['imagen']['name']);
+                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dir . $nombre_archivo)) {
+                    $img = $dir . $nombre_archivo;
+                    $query = "UPDATE servicios SET nombre=?, precio=?, duracion=?, imagen=? WHERE id=?";
+                    $params = [$nombre, $precio, $duracion, $img, $id];
+                }
+            }
+            $pdo->prepare($query)->execute($params);
+
+        } elseif ($_POST['accion_servicio'] == 'borrar') { 
+            $pdo->prepare("DELETE FROM servicios WHERE id=?")->execute([$_POST['id']]); 
+        }
     }
+
+    // --- LÓGICA DE BARBEROS ---
     if (isset($_POST['accion_barbero'])) {
         if ($_POST['accion_barbero'] == 'crear') {
-            $foto = !empty($_POST['foto_url']) ? $_POST['foto_url'] : "https://ui-avatars.com/api/?background=random&name=" . $_POST['nombre'];
-            $pdo->prepare("INSERT INTO barberos (nombre, hora_inicio, hora_fin, foto_url, activo) VALUES (?, ?, ?, ?, 1)")->execute([$_POST['nombre'], $_POST['h_ini'], $_POST['h_fin'], $foto]);
+            $foto = "https://ui-avatars.com/api/?background=0b1220&color=fff&name=" . urlencode($_POST['nombre']);
+            
+            if (isset($_FILES['foto']) && $_FILES['foto']['error'] == UPLOAD_ERR_OK) {
+                $dir = 'uploads/';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $nombre_archivo = time() . '_barb_' . basename($_FILES['foto']['name']);
+                if (move_uploaded_file($_FILES['foto']['tmp_name'], $dir . $nombre_archivo)) {
+                    $foto = $dir . $nombre_archivo;
+                }
+            }
+
+            $d_ini = !empty($_POST['h_desc_ini']) ? $_POST['h_desc_ini'] : null;
+            $d_fin = !empty($_POST['h_desc_fin']) ? $_POST['h_desc_fin'] : null;
+            $pdo->prepare("INSERT INTO barberos (nombre, hora_inicio, hora_fin, hora_descanso_inicio, hora_descanso_fin, foto_url, activo) VALUES (?, ?, ?, ?, ?, ?, 1)")->execute([$_POST['nombre'], $_POST['h_ini'], $_POST['h_fin'], $d_ini, $d_fin, $foto]);
         } elseif ($_POST['accion_barbero'] == 'borrar') { $pdo->prepare("DELETE FROM barberos WHERE id=?")->execute([$_POST['id']]); }
     }
+
+    // --- LÓGICA DE CONFIGURACIÓN ---
     if (isset($_POST['guardar_config'])) {
         $data = $_POST; unset($data['guardar_config']);
         $checks = ['estado_movil', 'estado_zelle', 'estado_efectivo'];
@@ -40,6 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach($data as $key => $val) { $pdo->prepare("INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE valor = ?")->execute([$key, $val, $val]); }
     }
 }
+
 $pendientes = $pdo->query("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN barberos b ON c.barbero_id=b.id WHERE c.estado_pago='pendiente' ORDER BY c.fecha, c.hora")->fetchAll(PDO::FETCH_ASSOC);
 $hoy_citas = $pdo->query("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN barberos b ON c.barbero_id=b.id WHERE c.estado_pago='verificado' AND c.fecha='$hoy' ORDER BY c.hora")->fetchAll(PDO::FETCH_ASSOC);
 $historial = $pdo->query("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN barberos b ON c.barbero_id=b.id ORDER BY c.fecha DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
@@ -80,6 +136,20 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
         .toggle-box{width:18px;height:18px;border-radius:5px;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;transition:var(--transition);font-size:.55rem;color:var(--bg)}
         .toggle-wrap input:checked~.toggle-box{background:var(--gold);border-color:var(--gold)}
         .toggle-wrap input{display:none}
+        
+        /* Selector de archivos elegante */
+        input[type="file"] { font-size: .7rem; color: var(--gray500); padding: 8px 0; cursor: pointer; }
+        input[type="file"]::file-selector-button { background: var(--gold); color: var(--bg); border: none; padding: 6px 12px; border-radius: 4px; font-weight: 700; font-size: .65rem; margin-right: 12px; cursor: pointer; transition: 0.3s; text-transform: uppercase; letter-spacing: .05em; }
+        input[type="file"]::file-selector-button:hover { background: var(--white); }
+        
+        /* Estilos del Modal Limpio */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal-content { width: 100%; max-width: 450px; padding: 32px; position: relative; transform: translateY(20px); transition: transform 0.3s; border: 1px solid rgba(255,255,255,0.05); }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .close-modal { position: absolute; top: 16px; right: 20px; background: none; border: none; color: var(--gray500); cursor: pointer; font-size: 1.2rem; transition: 0.3s; }
+        .close-modal:hover { color: var(--white); transform: scale(1.1); }
+
         @media(min-width:768px){.form-grid-4{grid-template-columns:repeat(4,1fr)}.form-grid-2{grid-template-columns:1fr 1fr}}
     </style>
 </head>
@@ -103,10 +173,8 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
 
     <main class="container-lg" style="margin-top:32px">
 
-        <!-- ═══ DASHBOARD ═══ -->
         <section class="view active" id="v-dashboard">
             <div class="grid gap-8" style="grid-template-columns:1fr;align-items:start">
-                <!-- KPIs -->
                 <div class="grid grid-2 gap-4" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
                     <div class="kpi"><p class="label">Citas Hoy</p><p class="value"><?= count($hoy_citas) + count($pendientes) ?></p></div>
                     <div class="kpi"><p class="label">Ingresos Est.</p><p class="value">$<?= count($hoy_citas)*15 ?></p></div>
@@ -114,7 +182,6 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                     <div class="kpi"><p class="label">Confirmadas</p><p class="value" style="color:var(--green)"><?= count($hoy_citas) ?></p></div>
                 </div>
 
-                <!-- Pendientes -->
                 <div>
                     <h3 class="flex items-center gap-2" style="font-size:.7rem;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.15em;margin-bottom:16px"><i class="fas fa-wallet"></i> Por Verificar</h3>
                     <?php if(empty($pendientes)): ?>
@@ -144,7 +211,6 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                     <?php endif; ?>
                 </div>
 
-                <!-- Calendario Hoy -->
                 <div>
                     <h3 style="font-size:.9rem;font-weight:800;margin-bottom:16px">Calendario de Hoy</h3>
                     <?php if(empty($hoy_citas)): ?>
@@ -169,45 +235,51 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
             </div>
         </section>
 
-        <!-- ═══ SERVICIOS ═══ -->
         <section class="view" id="v-servicios">
             <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:20px">Gestión de Servicios</h2>
             <div class="glass" style="padding:24px;margin-bottom:24px">
-                <form method="POST" class="form-grid form-grid-4">
+                <form method="POST" enctype="multipart/form-data" class="form-grid form-grid-4">
                     <div style="grid-column:span 2"><label class="form-label">Nombre</label><input name="nombre" required placeholder="Ej: Corte + Barba" class="input"></div>
                     <div><label class="form-label">Precio ($)</label><input name="precio" type="number" step="0.01" required placeholder="15.00" class="input"></div>
                     <div><label class="form-label">Duración (min)</label><input name="duracion" type="number" step="5" value="30" class="input"></div>
-                    <div style="grid-column:1/-1"><label class="form-label">URL Imagen (Opcional)</label><input name="img_url" placeholder="https://images.unsplash.com/..." class="input"></div>
+                    <div style="grid-column:1/-1"><label class="form-label">Subir Imagen del Servicio</label><input type="file" name="imagen" accept="image/*" class="input" style="border:none; padding:8px 0; background:transparent;"></div>
                     <div style="grid-column:1/-1"><button type="submit" name="accion_servicio" value="crear" class="btn btn-gold w-full">Agregar Nuevo Servicio</button></div>
                 </form>
             </div>
+            
             <div class="grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
-                <?php foreach($servicios as $s): $safe_img = (!empty($s['imagen']) && filter_var($s['imagen'], FILTER_VALIDATE_URL)) ? $s['imagen'] : 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=400'; ?>
+                <?php foreach($servicios as $s): $safe_img = !empty($s['imagen']) ? $s['imagen'] : 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=400'; ?>
                 <div class="glass flex items-center gap-4 relative" style="padding:16px;overflow:visible">
-                    <img src="<?= $safe_img ?>" style="width:56px;height:56px;border-radius:var(--radius);object-fit:cover">
+                    <img src="<?= htmlspecialchars($safe_img) ?>" style="width:56px;height:56px;border-radius:var(--radius);object-fit:cover">
                     <div>
                         <p style="font-size:.85rem;font-weight:800"><?= htmlspecialchars($s['nombre']) ?></p>
                         <p class="text-gold font-mono font-black" style="font-size:.9rem;margin-top:2px">$<?= $s['precio'] ?></p>
                         <p class="font-mono" style="font-size:.65rem;color:var(--gray500)"><?= $s['duracion'] ?> min</p>
                     </div>
-                    <form method="POST" onsubmit="return confirm('¿Eliminar?')" style="position:absolute;top:10px;right:10px">
-                        <input type="hidden" name="id" value="<?= $s['id'] ?>">
-                        <button name="accion_servicio" value="borrar" class="btn btn-danger btn-icon btn-sm" style="width:28px;height:28px"><i class="fas fa-trash" style="font-size:.6rem"></i></button>
-                    </form>
+                    
+                    <div style="position:absolute; top:10px; right:10px; display:flex; gap:6px;">
+                        <button type="button" onclick="abrirModalServicio(<?= $s['id'] ?>, '<?= htmlspecialchars($s['nombre'], ENT_QUOTES) ?>', <?= $s['precio'] ?>, <?= $s['duracion'] ?>)" class="btn btn-icon btn-sm" style="background:rgba(255,255,255,0.1); width:28px; height:28px;"><i class="fas fa-pen" style="font-size:.6rem; color:var(--white);"></i></button>
+                        
+                        <form method="POST" onsubmit="return confirm('¿Eliminar?')">
+                            <input type="hidden" name="id" value="<?= $s['id'] ?>">
+                            <button name="accion_servicio" value="borrar" class="btn btn-danger btn-icon btn-sm" style="width:28px;height:28px"><i class="fas fa-trash" style="font-size:.6rem"></i></button>
+                        </form>
+                    </div>
                 </div>
                 <?php endforeach; ?>
             </div>
         </section>
 
-        <!-- ═══ EQUIPO ═══ -->
         <section class="view" id="v-equipo">
             <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:20px">Gestión de Personal</h2>
             <div class="glass" style="padding:24px;margin-bottom:24px">
-                <form method="POST" class="form-grid form-grid-4">
+                <form method="POST" enctype="multipart/form-data" class="form-grid form-grid-4">
                     <div style="grid-column:span 2"><label class="form-label">Nombre</label><input name="nombre" required placeholder="Ej: Joshy" class="input"></div>
                     <div><label class="form-label">Hora Entrada</label><input name="h_ini" type="time" value="09:00" class="input"></div>
                     <div><label class="form-label">Hora Salida</label><input name="h_fin" type="time" value="18:00" class="input"></div>
-                    <div style="grid-column:1/-1"><label class="form-label">Foto URL (Opcional)</label><input name="foto_url" placeholder="https://..." class="input"></div>
+                    <div><label class="form-label">Descanso Inicio</label><input name="h_desc_ini" type="time" class="input" title="Dejar vacío si no aplica"></div>
+                    <div><label class="form-label">Descanso Fin</label><input name="h_desc_fin" type="time" class="input" title="Dejar vacío si no aplica"></div>
+                    <div style="grid-column:span 2"><label class="form-label">Subir Foto de Perfil</label><input type="file" name="foto" accept="image/*" class="input" style="border:none; padding:8px 0; background:transparent;"></div>
                     <div style="grid-column:1/-1"><button type="submit" name="accion_barbero" value="crear" class="btn btn-gold w-full">Registrar Barbero / Estilista</button></div>
                 </form>
             </div>
@@ -215,10 +287,13 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                 <?php foreach($barberos as $b): ?>
                 <div class="glass flex items-center justify-between" style="padding:16px">
                     <div class="flex items-center gap-3">
-                        <img src="<?= $b['foto_url'] ?: 'https://ui-avatars.com/api/?background=0b1220&color=fff&name='.$b['nombre'] ?>" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.08)">
+                        <img src="<?= htmlspecialchars($b['foto_url'] ?: 'https://ui-avatars.com/api/?background=0b1220&color=fff&name='.$b['nombre']) ?>" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.08)">
                         <div>
                             <p style="font-size:.85rem;font-weight:800"><?= htmlspecialchars($b['nombre']) ?></p>
                             <p class="font-mono" style="font-size:.7rem;color:var(--gray500)"><?= substr($b['hora_inicio'],0,5) ?> - <?= substr($b['hora_fin'],0,5) ?></p>
+                            <?php if(!empty($b['hora_descanso_inicio'])): ?>
+                                <p class="font-mono" style="font-size:.65rem;color:var(--gold)">Descanso: <?= substr($b['hora_descanso_inicio'],0,5) ?> - <?= substr($b['hora_descanso_fin'],0,5) ?></p>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <form method="POST" onsubmit="return confirm('¿Eliminar?')">
@@ -230,7 +305,6 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
             </div>
         </section>
 
-        <!-- ═══ HISTORIAL ═══ -->
         <section class="view" id="v-historial">
             <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:20px">Historial de Operaciones</h2>
             <div class="glass overflow-hidden" style="border-radius:var(--radius-lg)">
@@ -253,7 +327,6 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
             </div>
         </section>
 
-        <!-- ═══ CONFIG ═══ -->
         <section class="view" id="v-config">
             <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:20px">Configuración Global</h2>
             <div class="glass" style="padding:24px;max-width:640px">
@@ -283,19 +356,75 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
         </section>
     </main>
 
+    <div id="modalEditServicio" class="modal-overlay">
+        <div class="glass modal-content" style="border-radius: var(--radius-lg);">
+            <button type="button" class="close-modal" onclick="cerrarModal()"><i class="fas fa-times"></i></button>
+            <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:20px;color:var(--white);">Editar Servicio Premium</h3>
+            
+            <form method="POST" enctype="multipart/form-data" class="form-grid">
+                <input type="hidden" name="id" id="edit_id">
+                
+                <div>
+                    <label class="form-label">Nombre del Servicio</label>
+                    <input name="nombre" id="edit_nombre" required class="input">
+                </div>
+                
+                <div class="form-grid form-grid-2">
+                    <div>
+                        <label class="form-label">Precio ($)</label>
+                        <input name="precio" id="edit_precio" type="number" step="0.01" required class="input">
+                    </div>
+                    <div>
+                        <label class="form-label">Duración (min)</label>
+                        <input name="duracion" id="edit_duracion" type="number" step="5" required class="input">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="form-label">Actualizar Imagen (Opcional)</label>
+                    <input type="file" name="imagen" accept="image/*" class="input" style="border:none; padding:8px 0; background:transparent; width:100%;">
+                </div>
+                
+                <button type="submit" name="accion_servicio" value="editar" class="btn btn-gold w-full" style="margin-top:10px;">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
     <script src="app.js"></script>
     <script>
+        // Navegación de Pestañas
         function ver(id) {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
             document.getElementById('v-'+id).classList.add('active');
             event.currentTarget.classList.add('active');
         }
+
+        // Lógica del Modal de Edición
+        function abrirModalServicio(id, nombre, precio, duracion) {
+            document.getElementById('edit_id').value = id;
+            document.getElementById('edit_nombre').value = nombre;
+            document.getElementById('edit_precio').value = precio;
+            document.getElementById('edit_duracion').value = duracion;
+            document.getElementById('modalEditServicio').classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modalEditServicio').classList.remove('active');
+        }
+
+        // Cerrar modal al hacer clic fuera del recuadro
+        document.getElementById('modalEditServicio').addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal();
+        });
+
+        // WhatsApp redirect
         <?php if(!empty($ws_url)): ?>
             window.open("<?= $ws_url ?>", "_blank");
             window.location.href = "admin.php";
         <?php endif; ?>
-        // Show desktop elements
+        
+        // Elementos Desktop
         if(window.innerWidth >= 768) {
             document.getElementById('badge-desktop').style.display = '';
             document.getElementById('link-desktop').style.display = '';
