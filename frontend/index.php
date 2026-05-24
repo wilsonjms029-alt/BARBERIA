@@ -139,10 +139,23 @@ for ($i = 0; $i < 14; $i++) {
             transition: 0.2s;
         }
         .pay-btn { text-transform: uppercase; letter-spacing: 0.03em; }
-        .hora-btn { font-family: ui-monospace, monospace; }
+        .hora-btn {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 0.62rem;
+            line-height: 1.15;
+            letter-spacing: 0.01em;
+        }
         .hora-btn--selected, .pay-btn--selected {
             border-color: var(--gold);
             box-shadow: 0 0 0 2px var(--gold);
+        }
+        .hora-btn--blocked {
+            background: #1a2744 !important;
+            color: #6b7d9a !important;
+            border-color: #2a3d5c !important;
+            cursor: not-allowed;
+            opacity: 0.65;
+            box-shadow: none;
         }
         #payment-info {
             background: #fff !important;
@@ -212,7 +225,7 @@ for ($i = 0; $i < 14; $i++) {
                 <div class="flex gap-4 overflow-x-auto hide-scroll pb-1 px-1">
                     <?php foreach($barberos as $i => $b): ?>
                     <label class="cursor-pointer group flex-shrink-0 text-center relative">
-                        <input type="radio" name="barbero_id" value="<?php echo $b['id']; ?>" class="peer hidden" <?php echo $i===0?'checked':''; ?>>
+                        <input type="radio" name="barbero_id" value="<?php echo $b['id']; ?>" class="peer hidden" <?php echo $i===0?'checked':''; ?> onchange="loadHours()">
                         <div class="check-ring w-16 h-16 rounded-full p-[2px] border-2 border-[#3d5278] transition-all duration-300 relative mx-auto bg-[#1c2d4a]">
                             <img src="<?php echo $b['foto_url'] ?: 'https://ui-avatars.com/api/?name='.$b['nombre'].'&background=0b1220&color=fff'; ?>" 
                                  class="w-full h-full rounded-full object-cover">
@@ -228,7 +241,7 @@ for ($i = 0; $i < 14; $i++) {
                 <div class="space-y-2.5">
                     <?php foreach($servicios as $i => $s): ?>
                     <label class="block cursor-pointer">
-                        <input type="radio" name="servicio" value="<?php echo $s['id']; ?>" class="peer hidden" <?php echo $i===0?'checked':''; ?>>
+                        <input type="radio" name="servicio" value="<?php echo $s['id']; ?>" class="peer hidden" <?php echo $i===0?'checked':''; ?> onchange="loadHours()">
                         <div class="check-bg glass-card p-3.5 rounded-xl flex items-center gap-3.5 border border-white/5 transition-all">
                             <img src="<?php echo $s['imagen']; ?>" class="w-11 h-11 rounded-lg object-cover">
                             <div class="flex-1">
@@ -330,22 +343,39 @@ for ($i = 0; $i < 14; $i++) {
                 const req = await fetch(`api/horarios.php?fecha=${date}&barbero_id=${barber}&servicio_id=${serviceId}`);
                 const slots = await req.json();
                 grid.innerHTML = "";
+                document.getElementById('selected-hour').value = '';
 
-                if(slots.length === 0) {
-                    grid.innerHTML = '<div class="col-span-4 text-center text-[11px] text-red-400 py-2 border border-red-950/30 rounded-xl bg-red-950/10">Sin turnos disponibles</div>';
+                if (!Array.isArray(slots) || slots.length === 0) {
+                    grid.innerHTML = '<div class="col-span-4 text-center text-[11px] text-red-400 py-2 border border-red-950/30 rounded-xl bg-red-950/10">Sin horario para este día</div>';
                     return;
                 }
 
-                slots.forEach(time => {
+                const hayDisponible = slots.some(s => (typeof s === 'object' ? s.disponible : true));
+                if (!hayDisponible) {
+                    grid.innerHTML = '<div class="col-span-4 text-center text-[11px] text-amber-300/90 py-2 mb-2">No quedan turnos libres este día</div>';
+                }
+
+                slots.forEach(slot => {
+                    const time24 = typeof slot === 'string' ? slot : slot.hora;
+                    const label = (typeof slot === 'object' && slot.hora_12) ? slot.hora_12 : time24;
+                    const disponible = typeof slot === 'string' ? true : !!slot.disponible;
+                    const motivo = typeof slot === 'object' ? (slot.motivo || '') : '';
+
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.textContent = time;
-                    btn.className = 'hora-btn';
-                    btn.onclick = () => {
-                        document.querySelectorAll('#grid-horas .hora-btn').forEach(b => b.classList.remove('hora-btn--selected'));
-                        btn.classList.add('hora-btn--selected');
-                        document.getElementById('selected-hour').value = time + ":00";
-                    };
+                    btn.textContent = label;
+                    btn.className = disponible ? 'hora-btn' : 'hora-btn hora-btn--blocked';
+                    btn.disabled = !disponible;
+                    if (!disponible) {
+                        const titles = { pasado: 'Hora pasada', ocupado: 'Ya reservado', descanso: 'Descanso del barbero' };
+                        btn.title = titles[motivo] || 'No disponible';
+                    } else {
+                        btn.onclick = () => {
+                            document.querySelectorAll('#grid-horas .hora-btn').forEach(b => b.classList.remove('hora-btn--selected'));
+                            btn.classList.add('hora-btn--selected');
+                            document.getElementById('selected-hour').value = time24 + ':00';
+                        };
+                    }
                     grid.appendChild(btn);
                 });
             } catch(e) { grid.innerHTML = '<div class="col-span-4 text-center text-xs text-gray-500">Error de comunicación</div>'; }
