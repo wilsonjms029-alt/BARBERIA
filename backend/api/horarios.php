@@ -1,5 +1,6 @@
 <?php
-require 'db.php';
+header('Content-Type: application/json; charset=utf-8');
+require_once dirname(__DIR__) . '/bootstrap.php';
 
 $barbero_id = $_GET['barbero_id'] ?? null;
 $fecha = $_GET['fecha'] ?? null;

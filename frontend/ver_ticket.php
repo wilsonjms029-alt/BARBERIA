@@ -1,18 +1,22 @@
 <?php
-require 'db.php';
+require_once __DIR__ . '/bootstrap.php';
 $id = $_GET['id'] ?? 0;
 $stmt = $pdo->prepare("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN barberos b ON c.barbero_id = b.id WHERE c.id = ?");
 $stmt->execute([$id]);
 $cita = $stmt->fetch(PDO::FETCH_ASSOC);
 if(!$cita) die("Ticket inválido");
+
+$config = barberia_fetch_config($pdo);
+$branding = barberia_branding_from_config($config);
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALCORTE — VIP Access Pass</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>AlCorte — Comprobante de reserva</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <?php include __DIR__ . '/includes/brand-styles.php'; ?>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
@@ -52,9 +56,13 @@ if(!$cita) die("Ticket inválido");
             <div class="notch"></div>
 
             <!-- Top: Brand -->
-            <div class="text-center" style="margin-top:12px;position:relative;z-index:2">
-                <h1 class="neon-text text-gold" style="font-size:1.6rem;font-weight:900;letter-spacing:.2em">AL<span style="color:var(--white)">CORTE</span></h1>
-                <p style="font-size:.5rem;letter-spacing:.35em;color:var(--gray500);text-transform:uppercase;margin-top:3px">Access Granted</p>
+            <div class="brand-block--ticket" style="margin-top:12px;position:relative;z-index:2">
+                <?php
+                $brand_variant = 'center';
+                $brand_subline = 'Cita confirmada';
+                $brand_subline_muted = true;
+                include __DIR__ . '/includes/brand-header.php';
+                ?>
             </div>
 
             <!-- Middle: Data -->
@@ -64,13 +72,13 @@ if(!$cita) die("Ticket inválido");
                         <img src="https://ui-avatars.com/api/?name=<?= urlencode($cita['cliente_nombre']) ?>&background=0b1220&color=fff&size=128" style="width:100%;height:100%;border-radius:50%">
                     </div>
                     <h2 style="font-size:1.15rem;font-weight:900;text-transform:uppercase;margin-top:10px;letter-spacing:.04em"><?= htmlspecialchars(explode(' ', $cita['cliente_nombre'])[0]) ?></h2>
-                    <p style="font-size:.6rem;color:var(--gray500)">Miembro VIP</p>
+                    <p style="font-size:.6rem;color:var(--gray500)">Cliente</p>
                 </div>
 
                 <div class="data-row">
                     <div class="text-center" style="flex:1">
                         <p style="font-size:.5rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em">Fecha</p>
-                        <p class="text-gold font-bold" style="font-size:1.1rem"><?= date('d/M', strtotime($cita['fecha'])) ?></p>
+                        <p class="text-gold font-bold" style="font-size:1.1rem"><?= date('d', strtotime($cita['fecha'])) . '/' . barberia_mes_corto((int) date('n', strtotime($cita['fecha']))) ?></p>
                     </div>
                     <div style="width:1px;height:28px;background:rgba(255,255,255,.08)"></div>
                     <div class="text-center" style="flex:1">
@@ -80,24 +88,24 @@ if(!$cita) die("Ticket inválido");
                 </div>
 
                 <div class="text-center">
-                    <p style="font-size:.55rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.15em">Servicio Profesional</p>
+                    <p style="font-size:.55rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.15em">Detalle del servicio</p>
                     <p style="font-size:.8rem;font-weight:700;margin-top:3px"><?= htmlspecialchars($cita['barbero']) ?> · <?= htmlspecialchars($cita['servicio']) ?></p>
                 </div>
             </div>
 
             <!-- Bottom: Status + Barcode -->
             <div class="text-center" style="position:relative;z-index:2">
-                <span class="badge badge-green" style="margin-bottom:8px">● Reserva Confirmada</span>
+                <span class="badge badge-green" style="margin-bottom:8px">● Reserva confirmada</span>
                 <div class="barcode" id="barcode"></div>
-                <p class="font-mono" style="font-size:.5rem;color:var(--gray700);margin-top:6px">ID: <?= str_pad($id, 8, '0', STR_PAD_LEFT) ?> | REF: <?= htmlspecialchars($cita['referencia_pago']) ?></p>
+                <p class="font-mono" style="font-size:.5rem;color:var(--gray700);margin-top:6px">N.º <?= str_pad($id, 8, '0', STR_PAD_LEFT) ?> · Ref. <?= htmlspecialchars($cita['referencia_pago']) ?></p>
             </div>
         </div>
     </div>
 
     <p style="color:var(--gray500);font-size:.7rem;margin-top:24px;animation:breathe 2s infinite;position:relative;z-index:2">Haz captura de pantalla para ingresar</p>
-    <a href="index.php" class="text-gold font-bold page-content" style="font-size:.7rem;margin-top:12px;letter-spacing:.15em;text-transform:uppercase">Volver al Inicio</a>
+    <a href="index.php" class="text-gold font-bold page-content" style="font-size:.7rem;margin-top:12px;letter-spacing:.15em;text-transform:uppercase">Volver al inicio</a>
 
-    <script src="app.js"></script>
+    <script src="assets/app.js"></script>
     <script>
         new ParticleSystem('particles', 25);
         // Generate CSS barcode

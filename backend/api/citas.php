@@ -1,8 +1,13 @@
 <?php
-require 'db.php';
+require_once dirname(__DIR__) . '/bootstrap.php';
+
+$base = barberia_web_base();
 
 // Validar que vengan datos
-if (!isset($_POST['barbero_id'])) { header("Location: index.php"); exit; }
+if (!isset($_POST['barbero_id'])) {
+    header('Location: ' . $base . '/index.php');
+    exit;
+}
 
 $barbero_id = $_POST['barbero_id'];
 $servicio_id = $_POST['servicio'];
@@ -30,7 +35,7 @@ try {
     $id_cita = $pdo->lastInsertId();
     
     // REDIRIGIR AL TICKET VIP
-    header("Location: ver_ticket.php?id=$id_cita");
+    header('Location: ' . $base . '/ver_ticket.php?id=' . $id_cita);
     exit;
 
 } catch (Exception $e) {

@@ -1,0 +1,26 @@
+{
+  "name": "AlCorte Reservas",
+  "short_name": "AlCorte",
+  "description": "Reserva de citas — conectado a la web de la barbería",
+  "start_url": "./index.php",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070d19",
+  "theme_color": "#cfa87b",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "https://ui-avatars.com/api/?name=AC&background=cfa87b&color=070d19&size=192&bold=true",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://ui-avatars.com/api/?name=AC&background=cfa87b&color=070d19&size=512&bold=true",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

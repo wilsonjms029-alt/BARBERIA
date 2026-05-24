@@ -1,6 +1,6 @@
 <?php
 session_start();
-require 'db.php';
+require_once __DIR__ . '/bootstrap.php';
 if (!isset($_SESSION['usuario_id'])) { $_SESSION['usuario_id']=1; $_SESSION['usuario_nombre']="Jefe"; $_SESSION['usuario_rol']="admin"; }
 $hoy = date('Y-m-d');
 $ws_url = "";
@@ -89,10 +89,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- LÓGICA DE CONFIGURACIÓN ---
     if (isset($_POST['guardar_config'])) {
-        $data = $_POST; unset($data['guardar_config']);
+        $data = $_POST;
+        unset($data['guardar_config']);
         $checks = ['estado_movil', 'estado_zelle', 'estado_efectivo'];
-        foreach($checks as $k) $data[$k] = isset($_POST[$k]) ? '1' : '0';
-        foreach($data as $key => $val) { $pdo->prepare("INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE valor = ?")->execute([$key, $val, $val]); }
+        foreach ($checks as $k) {
+            $data[$k] = isset($_POST[$k]) ? '1' : '0';
+        }
+        if (!empty($_FILES['logo']['name'])) {
+            $nuevoLogo = barberia_upload_logo($_FILES['logo'], __DIR__ . '/uploads/');
+            if ($nuevoLogo) {
+                barberia_config_set($pdo, 'logo_url', $nuevoLogo);
+            }
+        }
+        $permitidas = array_keys(barberia_config_defaults());
+        foreach ($data as $key => $val) {
+            if (!in_array($key, $permitidas, true) || $key === 'logo_url') {
+                continue;
+            }
+            barberia_config_set($pdo, $key, is_string($val) ? trim($val) : '');
+        }
     }
 }
 
@@ -101,8 +116,8 @@ $hoy_citas = $pdo->query("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN
 $historial = $pdo->query("SELECT c.*, b.nombre as barbero FROM citas c LEFT JOIN barberos b ON c.barbero_id=b.id ORDER BY c.fecha DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
 $servicios = $pdo->query("SELECT * FROM servicios")->fetchAll(PDO::FETCH_ASSOC);
 $barberos = $pdo->query("SELECT * FROM barberos")->fetchAll(PDO::FETCH_ASSOC);
-$conf_raw = $pdo->query("SELECT * FROM configuracion")->fetchAll(PDO::FETCH_KEY_PAIR);
-$conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zelle_email'=>'','estado_movil'=>'1','estado_zelle'=>'1','estado_efectivo'=>'1'], $conf_raw);
+$conf = barberia_fetch_config($pdo);
+$branding = barberia_branding_from_config($conf);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -110,7 +125,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ALCORTE — Panel Maestro</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="assets/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -165,8 +180,10 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                 <button class="nav-tab" onclick="ver('servicios')"><i class="fas fa-cut"></i>Servicios</button>
                 <button class="nav-tab" onclick="ver('equipo')"><i class="fas fa-users"></i>Equipo</button>
                 <button class="nav-tab" onclick="ver('historial')"><i class="fas fa-chart-bar"></i>Reportes</button>
-                <button class="nav-tab" onclick="ver('config')"><i class="fas fa-cog"></i>Config</button>
+                <button class="nav-tab" onclick="ver('config')"><i class="fas fa-cog"></i>Configuración</button>
             </div>
+            <a href="acceso-movil.php" class="btn btn-ghost btn-sm" title="URL para abrir en el móvil"><i class="fas fa-mobile-alt"></i> Móvil</a>
+            <a href="doc/README.md" class="btn btn-ghost btn-sm" title="Documentación" download><i class="fas fa-book"></i> Doc</a>
             <a href="index.php" target="_blank" class="btn btn-ghost btn-sm" style="display:none" id="link-desktop"><i class="fas fa-external-link-alt"></i> Ver Sitio</a>
         </div>
     </nav>
@@ -280,7 +297,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                     <div><label class="form-label">Descanso Inicio</label><input name="h_desc_ini" type="time" class="input" title="Dejar vacío si no aplica"></div>
                     <div><label class="form-label">Descanso Fin</label><input name="h_desc_fin" type="time" class="input" title="Dejar vacío si no aplica"></div>
                     <div style="grid-column:span 2"><label class="form-label">Subir Foto de Perfil</label><input type="file" name="foto" accept="image/*" class="input" style="border:none; padding:8px 0; background:transparent;"></div>
-                    <div style="grid-column:1/-1"><button type="submit" name="accion_barbero" value="crear" class="btn btn-gold w-full">Registrar Barbero / Estilista</button></div>
+                    <div style="grid-column:1/-1"><button type="submit" name="accion_barbero" value="crear" class="btn btn-gold w-full">Registrar barbero</button></div>
                 </form>
             </div>
             <div class="grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
@@ -310,7 +327,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
             <div class="glass overflow-hidden" style="border-radius:var(--radius-lg)">
                 <div style="overflow-x:auto">
                     <table class="tbl">
-                        <thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Especialista</th><th>Pago</th></tr></thead>
+                        <thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Barbero</th><th>Pago</th></tr></thead>
                         <tbody>
                             <?php foreach($historial as $h): ?>
                             <tr>
@@ -330,7 +347,27 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
         <section class="view" id="v-config">
             <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:20px">Configuración Global</h2>
             <div class="glass" style="padding:24px;max-width:640px">
-                <form method="POST" class="flex flex-col gap-6">
+                <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-6">
+                    <div style="border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:20px">
+                        <h3 style="font-size:.65rem;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.15em;margin-bottom:14px">Marca de tu barbería (SaaS)</h3>
+                        <p style="font-size:.7rem;color:var(--gray500);margin-bottom:14px;line-height:1.5">El logo y nombre se muestran a tus clientes. <strong style="color:var(--gray300)">AlCorte</strong> sigue visible como plataforma de reservas.</p>
+                        <div class="form-grid" style="gap:12px">
+                            <div>
+                                <label class="form-label">Nombre del negocio</label>
+                                <input name="nombre_negocio" value="<?= htmlspecialchars($conf['nombre_negocio']) ?>" placeholder="Ej: Barbería El Estilo" class="input">
+                            </div>
+                            <div>
+                                <label class="form-label">Logo (PNG, JPG o WebP)</label>
+                                <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" class="input" style="border:none;padding:8px 0;background:transparent">
+                                <?php if ($branding['has_logo']): ?>
+                                <div style="margin-top:12px;display:flex;align-items:center;gap:12px">
+                                    <img src="<?= htmlspecialchars($branding['logo_url']) ?>" alt="Logo actual" style="width:56px;height:56px;object-fit:cover;border-radius:50%;border:2px solid rgba(207,168,123,.4);background:transparent">
+                                    <span style="font-size:.65rem;color:var(--gray500)">Vista previa del logo actual</span>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <h3 style="font-size:.65rem;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.15em;margin-bottom:14px">Pasarelas Habilitadas</h3>
                         <div class="flex flex-wrap gap-6">
@@ -350,7 +387,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
                             <div><label class="form-label">Correo Zelle</label><input name="zelle_email" value="<?= htmlspecialchars($conf['zelle_email']) ?>" placeholder="pagos@alcorte.com" class="input"></div>
                         </div>
                     </div>
-                    <button type="submit" name="guardar_config" class="btn btn-gold w-full">Guardar Configuración Maestra</button>
+                    <button type="submit" name="guardar_config" class="btn btn-gold w-full">Guardar configuración</button>
                 </form>
             </div>
         </section>
@@ -359,7 +396,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
     <div id="modalEditServicio" class="modal-overlay">
         <div class="glass modal-content" style="border-radius: var(--radius-lg);">
             <button type="button" class="close-modal" onclick="cerrarModal()"><i class="fas fa-times"></i></button>
-            <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:20px;color:var(--white);">Editar Servicio Premium</h3>
+            <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:20px;color:var(--white);">Editar servicio</h3>
             
             <form method="POST" enctype="multipart/form-data" class="form-grid">
                 <input type="hidden" name="id" id="edit_id">
@@ -390,7 +427,7 @@ $conf = array_merge(['banco_nombre'=>'','banco_ci'=>'','banco_telefono'=>'','zel
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="assets/app.js"></script>
     <script>
         // Navegación de Pestañas
         function ver(id) {

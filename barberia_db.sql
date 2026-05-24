@@ -120,7 +120,9 @@ INSERT INTO `configuracion` (`clave`, `valor`) VALUES
 ('estado_efectivo', '1'),
 ('estado_movil', '1'),
 ('estado_zelle', '1'),
-('zelle_email', 'pagos@barberia.com');
+('zelle_email', 'pagos@barberia.com'),
+('nombre_negocio', ''),
+('logo_url', '');
 
 -- --------------------------------------------------------
 

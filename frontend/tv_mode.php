@@ -1,6 +1,6 @@
 <?php
 date_default_timezone_set('America/Caracas');
-require 'db.php';
+require_once __DIR__ . '/bootstrap.php';
 $hoy = date('Y-m-d');
 $sql = "SELECT c.*, b.nombre as barbero, COALESCE(s.duracion, 30) as duracion 
         FROM citas c 
@@ -31,9 +31,9 @@ $total_hoy = count($citas);
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>ALCORTE — TV Mode</title>
+    <title>AlCorte — Pantalla de turnos</title>
     <meta http-equiv="refresh" content="30">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="assets/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -77,7 +77,7 @@ $total_hoy = count($citas);
         </div>
         <div style="text-align:right">
             <div class="clock text-gold" id="liveClock"><?= date('H:i') ?></div>
-            <p style="font-size:.85rem;color:var(--gold);font-weight:700;letter-spacing:.15em;text-transform:uppercase"><?= strftime("%A, %d de %B") ?></p>
+            <p style="font-size:.85rem;color:var(--gold);font-weight:700;letter-spacing:.15em;text-transform:uppercase"><?= barberia_fecha_larga() ?></p>
         </div>
     </header>
 
@@ -85,7 +85,7 @@ $total_hoy = count($citas);
         <div class="panel-left">
             <h2 class="flex items-center gap-3" style="font-size:1.4rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em">
                 <i class="fas fa-cut text-gold animate-float"></i>
-                <span>Atendiendo Ahora</span>
+                <span>Atendiendo ahora</span>
             </h2>
 
             <?php if(empty($en_silla)): ?>
@@ -112,7 +112,7 @@ $total_hoy = count($citas);
                             <i class="fas fa-clock text-gold" style="font-size:1.5rem"></i>
                             <?= substr($c['hora'],0,5) ?>
                         </div>
-                        <span class="badge badge-gold blink" style="margin-top:8px;font-size:.7rem;padding:6px 14px">En Progreso</span>
+                        <span class="badge badge-gold blink" style="margin-top:8px;font-size:.7rem;padding:6px 14px">En progreso</span>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -121,11 +121,11 @@ $total_hoy = count($citas);
             <!-- Stats -->
             <div class="grid grid-3 gap-4" style="margin-top:auto">
                 <div class="stat-card">
-                    <p style="font-size:.65rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em;font-weight:700">Total Hoy</p>
+                    <p style="font-size:.65rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em;font-weight:700">Citas hoy</p>
                     <p class="font-mono font-black text-3xl" style="margin-top:4px"><?= $total_hoy ?></p>
                 </div>
                 <div class="stat-card">
-                    <p style="font-size:.65rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em;font-weight:700">En Silla</p>
+                    <p style="font-size:.65rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em;font-weight:700">En silla</p>
                     <p class="font-mono font-black text-3xl text-gold" style="margin-top:4px"><?= count($en_silla) ?></p>
                 </div>
                 <div class="stat-card">
@@ -137,7 +137,7 @@ $total_hoy = count($citas);
 
         <div class="panel-right">
             <h2 class="flex items-center gap-3" style="font-size:1.1rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--gray300);margin-bottom:24px">
-                <i class="fas fa-hourglass-half"></i> Próximos Turnos
+                <i class="fas fa-hourglass-half"></i> Próximos turnos
             </h2>
             <div class="flex flex-col gap-3" style="flex:1;overflow:hidden">
                 <?php if(empty($en_espera)): ?>
@@ -153,7 +153,7 @@ $total_hoy = count($citas);
                         </div>
                         <div style="text-align:right">
                             <p class="font-mono font-black" style="font-size:1.4rem"><?= substr($e['hora'],0,5) ?></p>
-                            <p style="font-size:.6rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em">Hora Cita</p>
+                            <p style="font-size:.6rem;color:var(--gray500);text-transform:uppercase;letter-spacing:.1em">Hora de cita</p>
                         </div>
                     </div>
                     <?php endforeach; ?>

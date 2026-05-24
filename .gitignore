@@ -1,0 +1,3 @@
+# Archivos subidos por cada barbería (logos, fotos)
+frontend/uploads/*
+!frontend/uploads/.gitkeep

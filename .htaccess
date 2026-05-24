@@ -1,0 +1,26 @@
+# Mantiene las mismas URLs en el navegador (index.php, api_auth.php, etc.)
+RewriteEngine On
+
+# API (nuevas rutas limpias)
+RewriteRule ^api/auth\.php$ backend/api/auth.php [L,QSA]
+RewriteRule ^api/horarios\.php$ backend/api/horarios.php [L,QSA]
+RewriteRule ^api/citas\.php$ backend/api/citas.php [L,QSA]
+RewriteRule ^api/red-test\.php$ backend/api/red-test.php [L,QSA]
+
+# API (compatibilidad con nombres anteriores)
+RewriteRule ^api_auth\.php$ backend/api/auth.php [L,QSA]
+RewriteRule ^obtener_horarios\.php$ backend/api/horarios.php [L,QSA]
+RewriteRule ^procesar_cita\.php$ backend/api/citas.php [L,QSA]
+RewriteRule ^red-test\.php$ backend/api/red-test.php [L,QSA]
+
+# Logos y archivos subidos (barbería SaaS)
+RewriteRule ^uploads/(.*)$ frontend/uploads/$1 [L]
+
+# Assets estáticos
+RewriteRule ^assets/(.*)$ frontend/assets/$1 [L]
+RewriteRule ^styles\.css$ frontend/assets/styles.css [L]
+RewriteRule ^app\.js$ frontend/assets/app.js [L]
+RewriteRule ^manifest\.json$ frontend/assets/manifest.json [L]
+
+# Páginas web
+RewriteRule ^(index|login|admin|mis_cortes|ver_ticket|tv_mode|acceso-movil|logout|buscar_citas)\.php$ frontend/$1.php [L,QSA]
